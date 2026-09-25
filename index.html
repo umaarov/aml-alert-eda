@@ -45,7 +45,7 @@ nav{display:flex;gap:14px;overflow-x:auto;scrollbar-width:none;flex:1}
 nav a{color:var(--text-2);text-decoration:none;font-size:14px;white-space:nowrap}
 nav a:hover{color:var(--text)}
 #theme{border:1px solid var(--border);background:var(--surface);color:var(--text-2);border-radius:8px;padding:4px 10px;font:inherit;font-size:13px;cursor:pointer}
-.hero{padding:56px 0 24px}
+.hero{padding-top:56px;padding-bottom:24px}
 .eyebrow{color:var(--muted);font-size:13px;font-weight:500;letter-spacing:.04em;text-transform:uppercase}
 h1{font-size:clamp(30px,5vw,44px);line-height:1.15;margin:8px 0 16px;letter-spacing:-.02em}
 h2{font-size:26px;margin:0 0 8px;letter-spacing:-.01em}
@@ -53,7 +53,7 @@ h3{font-size:17px;margin:0 0 4px}
 .lead{font-size:18px;color:var(--text-2);max-width:760px}
 section{padding:40px 0;border-top:1px solid var(--border)}
 section>.wrap>p{max-width:780px;color:var(--text-2)}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:24px 0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:24px 0}
 .tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
 .tile .l{color:var(--text-2);font-size:13px}
 .tile .v{font-size:26px;font-weight:600;letter-spacing:-.01em}
@@ -115,14 +115,14 @@ svg text{font-family:Inter,system-ui,sans-serif}
     <li><b>Look for separating behaviour.</b> We compared escalated and dismissed alerts on transaction volume, mix,
       size, timing and direction. We measured each candidate signal by its univariate ROC-AUC, so that weak
       effects didn't get buried.</li>
-    <li><b>Aggregate the history into features.</b> We built 277 features for each alert, including
-      distribution statistics for each direction × type combination, recency windows, flow balances,
-      drift, and a pooled "size level".</li>
+    <li><b>Aggregate the history into features.</b> We built 333 features for each alert, including
+      distribution statistics for each direction × type combination, <b>pairwise differences between those size
+      levels</b> (the biggest single gain), recency windows, flow balances, drift, and a pooled "size level".</li>
     <li><b>Validate honestly.</b> Train and test cover the same dates, so we used 5-fold stratified CV repeated over
-      3 seeds. We kept only changes that beat the fold-to-fold noise (about ±0.003 AUC) and ran ablations on each
-      feature group.</li>
-    <li><b>Ensemble and calibrate.</b> We blend the ranks of a shallow LightGBM, a small CatBoost and a logistic
-      regression, then apply Platt scaling to the blend. Scaling doesn't change the ranking, so AUC is unaffected,
+      3 seeds, and re-checked each promising change on seeds it hadn't been tuned on. We kept only changes that beat
+      the seed-to-seed noise (about ±0.0015 AUC), ran ablations on each feature group, and tuned LightGBM with Optuna.</li>
+    <li><b>Ensemble and calibrate.</b> We blend the ranks of a tuned shallow LightGBM (weight 0.8), a small CatBoost
+      and a logistic regression (0.1 each), then apply Platt scaling to the blend. Scaling doesn't change the ranking, so AUC is unaffected,
       but the outputs become real escalation probabilities.</li>
   </ol>
 </div></section>
@@ -198,7 +198,7 @@ svg text{font-family:Inter,system-ui,sans-serif}
     <div class="card"><h3>Normalised daily activity before the alert</h3><p class="sub">7-day rolling mean of daily transaction share, 180 days → alert (day 0 burst excluded)</p>
       <div class="legend"><span><i class="line" style="background:var(--s1)"></i>Dismissed</span><span><i class="line" style="background:var(--s2)"></i>Escalated</span></div>
       <div class="chart" id="c-activity"></div></div>
-    <div class="card"><h3>The pre-alert burst</h3><p class="sub">Training transactions per 10-second bin in the last 6 minutes before the alert timestamp (seconds before alert)</p>
+    <div class="card"><h3>The pre-alert burst</h3><p class="sub">Training transactions per 10-second bin in the last 4 minutes before the alert timestamp (seconds before alert)</p>
       <div class="chart" id="c-burst"></div></div>
   </div>
   <div class="insight"><b>What we did with the burst.</b> We separated the "burst" (last 10 minutes) from the
@@ -226,10 +226,25 @@ svg text{font-family:Inter,system-ui,sans-serif}
       <div class="legend"><span><i style="background:var(--s1)"></i>Dismissed</span><span><i style="background:var(--s2)"></i>Escalated</span></div>
       <div class="chart" id="c-bthist"></div></div>
   </div>
-  <div class="insight"><b>Weak signals that add up.</b> No single feature exceeds 0.575 AUC. The signal is
-  <em>diffuse</em>: many small, mostly monotone effects spread across the direction × type size
-  distributions. That's why a linear model on rank-transformed features gets within 0.008 AUC of gradient
-  boosting, and why strong regularisation (depth 3, 7 leaves) beat deeper trees.</div>
+
+  <h3 style="margin-top:32px">The key insight: sizes relative to the same customer's other activity</h3>
+  <p style="max-width:780px;color:var(--text-2)">Absolute sizes separate the classes only weakly (best raw feature: 0.575 AUC). The strong
+  signal comes from <b>comparing a customer's size levels with each other</b>. Take the 75th-percentile outgoing
+  bank transfer minus the 75th-percentile cash deposit of the same customer. When transfers are small compared with the
+  cash coming in, the escalation rate is <b>28%</b>. When they're large compared with it, the rate is <b>9%</b>. The
+  cash-deposit size on its own carries almost no signal (0.51 AUC). It only matters relative to the customer's usual
+  transfer size, which matches a classic AML red flag: cash inflows out of line with how the account is normally used.</p>
+  <div class="grid2">
+    <div class="card"><h3>Relative vs absolute size</h3><p class="sub">Escalation rate by decile, from lowest to highest value of each measure</p>
+      <div class="legend"><span><i class="line" style="background:var(--s2)"></i>Transfer-out minus cash-in (q75)</span><span><i class="line" style="background:var(--s1)"></i>Transfer-out size alone</span><span><i class="line" style="background:var(--s3)"></i>Cash-in size alone</span></div>
+      <div class="chart" id="c-rel"></div></div>
+    <div class="card"><h3>Card spending vs bank transfers</h3><p class="sub">Escalation rate by decile of outgoing card size minus outgoing bank-transfer size (q75); the line marks the overall 17.2%</p>
+      <div class="chart" id="c-rel2"></div></div>
+  </div>
+  <div class="insight"><b>Why this mattered for modelling.</b> Gradient-boosted trees split on one feature at a time, so
+  they approximate a difference like "transfer size minus cash size" only with many splits. Giving them all 56 pairwise
+  differences (mean and q75 across the 8 direction × type cells) was the <b>largest single improvement: +0.008 to +0.010 OOF AUC</b>,
+  confirmed on unseen CV seeds. The best single difference reaches 0.618 AUC on its own.</div>
 </div></section>
 
 <section id="model"><div class="wrap">
@@ -237,32 +252,36 @@ svg text{font-family:Inter,system-ui,sans-serif}
   <div class="tablewrap"><table>
     <thead><tr><th>EDA observation</th><th>Features / decision</th></tr></thead>
     <tbody>
+      <tr><td>Escalation depends on sizes <em>relative</em> to the same customer's other activity (for example, transfers vs cash deposits)</td><td>All 56 pairwise differences of the mean and q75 size between the 8 direction × type cells</td></tr>
       <tr><td>Size levels differ by direction × type, and bank-transfer size separates the classes</td><td>Mean, std, min, max and q10/25/50/75/90 of the size index for each of the 8 direction × type cells; shares in size bins; type quantiles</td></tr>
       <tr><td>Size levels are strongly correlated across types (ρ ≈ 0.95)</td><td>A pooled "size level": the residual after removing the global direction × type mean, averaged per alert (reference stats fitted on train only)</td></tr>
       <tr><td>Busier accounts escalate slightly more often</td><td>Counts, active days, transactions per active day, daily max and std</td></tr>
       <tr><td>Incoming transactions dominate; flow balance matters in AML</td><td>Incoming share, net flow and in/out ratio on exponentiated sizes, and a pass-through score (min/max of in vs out volume)</td></tr>
       <tr><td>Activity ends in a burst just before the alert</td><td>Burst vs regular-history split, recency windows (7/30/90 days), ratios of recent to baseline rates, 60-day size drift, monthly trend slope</td></tr>
-      <tr><td>Random split in time; weak, diffuse signal</td><td>Stratified 5-fold CV × 3 seeds, shallow and heavily regularised models, rank-blending of different model families</td></tr>
+      <tr><td>Random split in time; weak, diffuse signal</td><td>Stratified 5-fold CV; Optuna search (45 trials) on 3 seeds, confirmed on 5 unseen seeds; shallow trees (depth 3); a small rank blend</td></tr>
     </tbody>
   </table></div>
   <div class="grid2">
-    <div class="card"><h3>Out-of-fold ROC-AUC by model</h3><p class="sub">5-fold stratified CV, averaged over 3 seeds</p>
+    <div class="card"><h3>Out-of-fold ROC-AUC by model</h3><p class="sub">5-fold stratified CV, averaged over 5 seeds (LR: 1)</p>
       <div class="chart" id="c-models"></div>
-      <p class="note">Blend = rank average with weights LightGBM 0.52 · LR 0.32 · CatBoost 0.17, then Platt-calibrated.</p></div>
+      <p class="note">Final = rank blend LightGBM 0.8 · CatBoost 0.1 · LR 0.1, then Platt-calibrated. The blend scores within noise of LightGBM alone; we keep the small share of other models for robustness on unseen data.</p></div>
     <div class="card"><h3>Where the model finds signal</h3><p class="sub">Share of LightGBM gain by feature group</p>
       <div class="chart" id="c-groups"></div></div>
   </div>
   <div class="grid2">
     <div class="card"><h3>Top 15 features by gain</h3><p class="sub">Final LightGBM configuration trained on all data</p>
       <div class="chart" id="c-imp"></div></div>
-    <div class="card"><h3>Feature group ablation</h3><p class="sub">Change in OOF AUC when a group is removed (3-seed mean)</p>
+    <div class="card"><h3>Feature group ablation</h3><p class="sub">Change in OOF AUC when a group is removed (final feature set, 3-seed mean)</p>
       <div class="chart" id="c-abl"></div>
-      <p class="note">Removing the direction × type stats costs the most. Removing the 100 recency-window features cost nothing, so we cut them down to three windows.</p></div>
+      <p class="note" id="abl-note"></p></div>
   </div>
   <h3 style="margin-top:28px">Experiments we tried and dropped</h3>
   <ul class="list">
     <li><b>Transaction-level model</b> (each transaction inherits its alert's label, predictions pooled per alert): 0.54 AUC. Too noisy, dropped.</li>
-    <li><b>Deeper / longer CatBoost</b> (1,500 iterations, depth 6): 0.623, clearly overfitting. The small version (400 iterations, depth 4) reaches 0.646.</li>
+    <li><b>Deeper / longer CatBoost</b> (1,500 iterations, depth 6): 0.623, clearly overfitting. The small version (400 iterations, depth 4) reaches 0.654.</li>
+    <li><b>Log volume and count ratios between cells</b> (the same idea as the size differences, applied to amounts and counts): no gain.</li>
+    <li><b>Tail shares, recent-window cell means, amount-time trends, in→out sequences</b>: each within ±0.0006 of the baseline, dropped.</li>
+    <li><b>Grid-searched blend weights</b>: fitted OOF noise. We use fixed weights instead.</li>
     <li><b>Burst-only features</b>: AUC 0.51–0.52 on their own; kept, but they add little.</li>
   </ul>
 </div></section>
@@ -276,7 +295,7 @@ svg text{font-family:Inter,system-ui,sans-serif}
     <div class="card"><h3>Other checks</h3>
       <ul class="list" style="margin:0">
         <li><b>Alert ID order</b>: escalation rate is flat across ID deciles (15.9–18.5%). No leakage; not used.</li>
-        <li><b>Alert date / month / weekday</b>: flat. Kept as weak features, but ablation shows no gain.</li>
+        <li><b>Alert date / month / weekday</b>: flat. Kept as weak features; removing them changes AUC by about 0.001, within CV noise.</li>
         <li><b>Round or repeated amounts</b>: only 145 of 7M values repeat, and those are just the per-type caps. No structuring signature.</li>
         <li><b>Share of cash / international</b>: nearly identical between classes.</li>
       </ul></div>
@@ -287,9 +306,9 @@ svg text{font-family:Inter,system-ui,sans-serif}
   <h2>Conclusion</h2>
   <ul class="list">
     <li><b>The data is a random split</b> with a 180-day history per alert and a 17.2% escalation rate. Stratified CV matches the test setting.</li>
-    <li><b>Escalation is driven by the size profile, not the mix.</b> Escalated alerts are associated with smaller (especially outgoing) bank transfers, a different card-size range, and slightly higher activity.</li>
-    <li><b>The signal is weak and diffuse.</b> The best single feature scores 0.575 AUC; combining about 270 history aggregates lifts this to about 0.65 OOF.</li>
-    <li><b>Simple and regularised models win.</b> Shallow LightGBM, small CatBoost and a logistic regression, rank-blended and calibrated: <b id="final-auc"></b> OOF ROC-AUC.</li>
+    <li><b>Escalation is driven by the size profile, not the mix.</b> Escalated alerts have smaller bank transfers, and above all transfers that are small compared with the same customer's cash deposits and card spending.</li>
+    <li><b>Relative beats absolute.</b> Raw size statistics top out at 0.575 AUC. Within-customer size differences reach 0.618 on their own, and adding them was the largest model improvement (+0.008 to +0.010).</li>
+    <li><b>Shallow, regularised models win.</b> Optuna-tuned depth-3 LightGBM, with a small CatBoost and a logistic regression rank-blended in and then calibrated: <b id="final-auc"></b> OOF ROC-AUC (up from 0.640 for our first baseline).</li>
     <li><b>Timing is mostly an artefact.</b> Hour, weekday and the pre-alert burst carry almost no information.</li>
   </ul>
   <p style="color:var(--muted);font-size:14px">The data is synthetic and contains no real customer records. The code is fully reproducible from the team notebook
@@ -389,13 +408,24 @@ function hbars(id,{data,cat,val,fmt=v=>v,color='--s1',x0=0,labelW=190,tipFmt,sig
                   :`M${xL+w},${by}H${xL+r}Q${xL},${by} ${xL},${by+r}V${by+bh-r}Q${xL},${by+bh} ${xL+r},${by+bh}H${xL+w}Z`;
     el('path',{d:pth,fill:css(d.c||color)},f.svg);
     const lt=el('text',{x:m.l-8,y:by+12,'text-anchor':'end','font-size':11.5,fill:css('--text-2')},f.svg);lt.textContent=d[cat].length>30?d[cat].slice(0,29)+'…':d[cat];
-    const vt=el('text',{x:(b>=a?xL+w:xL)+(b>=a?6:-6),y:by+12,'text-anchor':b>=a?'start':'end','font-size':11.5,fill:css('--text')},f.svg);vt.textContent=fmt(v);
+    const vt=el('text',{x:(b>=a?xL+w:X(0))+6,y:by+12,'text-anchor':'start','font-size':11.5,fill:css('--text')},f.svg);vt.textContent=fmt(v);
     const hit=el('rect',{x:0,y,width:f.W,height:row,fill:'transparent'},f.svg);
     hit.addEventListener('pointermove',ev=>{const r=f.svg.getBoundingClientRect();f.show(`<b>${d[cat]}</b><br>${tipFmt?tipFmt(d):fmt(v)}`,ev.clientX-r.left,ev.clientY-r.top);});
     hit.addEventListener('pointerleave',f.hide);
   });
 }
 
+const CELL={kirim_karta:'card-in',chiqim_karta:'card-out',kirim_bank_otkazmasi:'transfer-in',chiqim_bank_otkazmasi:'transfer-out',
+  kirim_naqd:'cash-in',chiqim_naqd:'cash-out',kirim_xalqaro:'intl-in',chiqim_xalqaro:'intl-out'};
+const TY={karta:'card',bank_otkazmasi:'transfer',naqd:'cash',xalqaro:'intl'};
+function nice(f){let m=f.match(/^pd_(\w+?)_((?:kirim|chiqim)_\w+?)__((?:kirim|chiqim)_\w+)$/);
+  if(m)return `${m[1]}: ${CELL[m[2]]} − ${CELL[m[3]]}`;
+  m=f.match(/^dt_(\w+?)_((?:kirim|chiqim)_\w+)$/);if(m)return `${CELL[m[2]]} ${m[1]}`;
+  m=f.match(/^ty_(\w+)_(q\d+)$/);if(m&&TY[m[1]])return `${TY[m[1]]} ${m[2]}`;
+  m=f.match(/^(karta|bank_otkazmasi|naqd|xalqaro)_amt_(\w+)$/);if(m)return `${TY[m[1]]} size ${m[2]}`;
+  m=f.match(/^z_mean_(\w+)$/);if(m&&TY[m[1]])return `${TY[m[1]]} pooled size level`;
+  m=f.match(/^bin_(\w+)_(\d)$/);if(m&&TY[m[1]])return `${TY[m[1]]} share in size bin ${m[2]}`;
+  return f;}
 let D;
 function renderAll(){
   if(!D)return;
@@ -420,22 +450,28 @@ function renderAll(){
   const roll=act.map((d,i)=>{const w=act.slice(Math.max(0,i-3),i+4);return {d:d.d,dism:w.reduce((s,v)=>s+v.dism,0)/w.length,esc:w.reduce((s,v)=>s+v.esc,0)/w.length};});
   line('c-activity',{data:roll,x:'d',series:[{k:'dism',label:'Dismissed',c:'--s1'},{k:'esc',label:'Escalated',c:'--s2'}],
     yfmt:v=>pct(v,2),xfmt:v=>v+'d',rev:true,xticks:[180,150,120,90,60,30,1],tipTitle:d=>`${d.d} days before alert`});
-  cols('c-burst',{data:D.burst.map(d=>({...d,lab:d.m})),cat:'lab',series:[{k:'n',label:'Transactions',c:'--s1'}],yfmt:v=>v>=1000?Math.round(v/1000)+'K':fmtN(v),
+  cols('c-burst',{data:D.burst.filter(d=>d.m<240).map(d=>({...d,lab:d.m})),cat:'lab',series:[{k:'n',label:'Transactions',c:'--s1'}],yfmt:v=>v>=1000?Math.round(v/1000)+'K':fmtN(v),
     labelEvery:6,tipTitle:d=>`${d.m}–${d.m+10} s before the alert`});
   line('c-btratio',{data:D.bt_ratio,x:'x',series:[{k:'r',label:'Escalated ÷ dismissed',c:'--s2'}],ref:1,yfmt:v=>v.toFixed(2)+'×',xfmt:v=>v.toFixed(1),
     tipTitle:d=>`Bank transfers, index ${(d.x-0.125).toFixed(2)} to ${(d.x+0.125).toFixed(2)}`});
   cols('c-btdec',{data:D.bt_mean_decile.map(d=>({...d,k:'D'+d.lab})),cat:'k',series:[{k:'rate',label:'Escalation rate',c:'--s1'}],yfmt:v=>pct(v,1),ref:o.rate,
     tipTitle:d=>`Decile ${d.lab} of mean bank-transfer size`});
-  hbars('c-uni',{data:D.univariate_auc.slice(0,10),cat:'f',val:'auc',x0:0.5,fmt:v=>v.toFixed(3),labelW:200});
+  hbars('c-uni',{data:D.univariate_auc.slice(0,10).map(d=>({...d,n:nice(d.f)})),cat:'n',val:'auc',x0:0.5,fmt:v=>v.toFixed(3),labelW:210,tipFmt:d=>`<span class="mono">${d.f}</span><br>AUC ${d.auc.toFixed(3)}`});
   line('c-bthist',{data:D.bt_mean_hist.filter(d=>d.d>0.002||d.e>0.002),x:'x',series:[{k:'d',label:'Dismissed',c:'--s1'},{k:'e',label:'Escalated',c:'--s2'}],ymin:0,yfmt:v=>pct(v,0),xfmt:v=>v.toFixed(1),
     tipTitle:d=>`Mean bank-transfer index ≈ ${d.x}`});
   const mName={lgb:'LightGBM (shallow)',cat:'CatBoost (small)',lr:'Logistic regression',blend:'Rank blend (final)'};
   hbars('c-models',{data:D.models.map(d=>({...d,n:mName[d.m],c:d.m==='blend'?'--s2':'--s1'})),cat:'n',val:'auc',x0:0.6,fmt:v=>v.toFixed(4),labelW:150});
   hbars('c-groups',{data:D.importance_groups,cat:'g',val:'v',fmt:v=>pct(v,1),labelW:170});
-  hbars('c-imp',{data:D.importance,cat:'f',val:'g',fmt:v=>pct(v,1),labelW:200});
-  const abl=[{g:'Dir × type stats',v:-0.0046},{g:'Flow & sums',v:-0.0022},{g:'Amount bins',v:-0.0011},{g:'Type quantiles',v:-0.0010},{g:'Gaps & bursts',v:-0.0009},
-    {g:'Monthly means',v:-0.0005},{g:'History split',v:-0.0005},{g:'Alert calendar',v:-0.0005},{g:'Recency windows (100)',v:-0.0002},{g:'Daily profile',v:0},{g:'Hour / weekend',v:0.0002}];
-  hbars('c-abl',{data:abl,cat:'g',val:'v',fmt:v=>(v>0?'+':'')+v.toFixed(4),labelW:160,signed:true});
+  hbars('c-imp',{data:D.importance.map(d=>({...d,n:nice(d.f)})),cat:'n',val:'g',fmt:v=>pct(v,1),labelW:210,tipFmt:d=>`<span class="mono">${d.f}</span><br>${pct(d.g,1)} of total gain`});
+  const rel=D.relative,lab=i=>'D'+(i+1);
+  line('c-rel',{data:rel.cashin_vs_btout.map((v,i)=>({i:i+1,rel:v,bt:rel.btout_raw[i],cash:rel.cashin_raw[i]})),x:'i',
+    series:[{k:'rel',label:'Transfer-out − cash-in',c:'--s2'},{k:'bt',label:'Transfer-out alone',c:'--s1'},{k:'cash',label:'Cash-in alone',c:'--s3'}],
+    ymin:0.05,ymax:0.3,ref:o.rate,yfmt:v=>pct(v,0),xfmt:v=>'D'+v,xticks:[1,2,3,4,5,6,7,8,9,10],tipTitle:d=>`Decile ${d.i}`});
+  cols('c-rel2',{data:rel.cardout_vs_btout.map((v,i)=>({k:lab(i),rate:v})),cat:'k',series:[{k:'rate',label:'Escalation rate',c:'--s1'}],yfmt:v=>pct(v,1),ref:o.rate,
+    tipTitle:d=>`Decile ${d.k.slice(1)} of card-out minus transfer-out`});
+  const top=D.ablation[0];
+  document.getElementById('abl-note').textContent=`Removing the ${top.n} pairwise size differences costs the most (${top.v.toFixed(4)}). Most other groups each change AUC by less than 0.0016: they overlap heavily, so no single one is essential.`;
+  hbars('c-abl',{data:D.ablation,cat:'g',val:'v',tipFmt:d=>`${d.n} features · ΔAUC ${(d.v>0?'+':'')+d.v.toFixed(4)}`,fmt:v=>(v>0?'+':'')+v.toFixed(4),labelW:160,signed:true});
   line('c-hour',{data:D.hour,x:'h',series:[{k:'rate',label:'Escalation rate',c:'--s1'}],ymin:0,ymax:0.25,yfmt:v=>pct(v,1),xfmt:v=>v+'h',xticks:[0,6,12,18,23],tipTitle:d=>`${d.h}:00–${d.h}:59`});
 }
 
@@ -444,7 +480,7 @@ fetch('data.json').then(r=>r.json()).then(d=>{D=d;const o=d.overview;
   document.getElementById('kpis').innerHTML=[
     ['Training alerts',fmtN(o.n_train),`${fmtN(o.n_pos)} escalated`],['Test alerts',fmtN(o.n_test),'to be ranked'],
     ['Transactions',(o.n_tx_train/1e6).toFixed(2)+'M',`+ ${(o.n_tx_test/1e6).toFixed(2)}M in test`],['Escalation rate',pct(o.rate),'training base rate'],
-    ['OOF ROC-AUC',blend.toFixed(3),'5-fold × 3 seeds']].map(([l,v,s])=>`<div class="tile"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+    ['OOF ROC-AUC',blend.toFixed(3),'5-fold × 5 seeds']].map(([l,v,s])=>`<div class="tile"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
   document.getElementById('r1').textContent=fmtN(o.n_train);document.getElementById('r2').textContent=fmtN(o.n_test);
   document.getElementById('r3').textContent=fmtN(o.n_tx_train);document.getElementById('r4').textContent=fmtN(o.n_tx_test);
   document.getElementById('rate-txt').textContent=pct(o.rate)+`, ${fmtN(o.n_pos)} of ${fmtN(o.n_train)}`;
