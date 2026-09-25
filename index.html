@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AML Alert Prioritization — EDA</title>
+<meta name="description" content="Team A2B70C81 · Exploratory data analysis and modeling notes for the AML alert escalation challenge.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f7f7f5; --surface:#fcfcfb; --surface-2:#f0efec; --border:#e4e3de;
+  --text:#0b0b0b; --text-2:#52514e; --muted:#7a7974; --grid:#e8e7e2;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+  --accent:#2a78d6; --accent-soft:#e6f0fc;
+}
+@media (prefers-color-scheme:dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme:dark;
+    --bg:#121211; --surface:#1a1a19; --surface-2:#242422; --border:#2e2e2b;
+    --text:#ffffff; --text-2:#c3c2b7; --muted:#8f8e86; --grid:#2c2c29;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --accent:#6da7ec; --accent-soft:#1c2a3b;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#121211; --surface:#1a1a19; --surface-2:#242422; --border:#2e2e2b;
+  --text:#ffffff; --text-2:#c3c2b7; --muted:#8f8e86; --grid:#2c2c29;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+  --accent:#6da7ec; --accent-soft:#1c2a3b;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 Inter,system-ui,-apple-system,sans-serif}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.86em}
+code{background:var(--surface-2);padding:.1em .35em;border-radius:4px}
+a{color:var(--accent)}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
+header.top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+header.top .wrap{display:flex;align-items:center;gap:16px;height:52px}
+header.top b{font-weight:600;white-space:nowrap}
+nav{display:flex;gap:14px;overflow-x:auto;scrollbar-width:none;flex:1}
+nav a{color:var(--text-2);text-decoration:none;font-size:14px;white-space:nowrap}
+nav a:hover{color:var(--text)}
+#theme{border:1px solid var(--border);background:var(--surface);color:var(--text-2);border-radius:8px;padding:4px 10px;font:inherit;font-size:13px;cursor:pointer}
+.hero{padding:56px 0 24px}
+.eyebrow{color:var(--muted);font-size:13px;font-weight:500;letter-spacing:.04em;text-transform:uppercase}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.15;margin:8px 0 16px;letter-spacing:-.02em}
+h2{font-size:26px;margin:0 0 8px;letter-spacing:-.01em}
+h3{font-size:17px;margin:0 0 4px}
+.lead{font-size:18px;color:var(--text-2);max-width:760px}
+section{padding:40px 0;border-top:1px solid var(--border)}
+section>.wrap>p{max-width:780px;color:var(--text-2)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:24px 0}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.tile .l{color:var(--text-2);font-size:13px}
+.tile .v{font-size:26px;font-weight:600;letter-spacing:-.01em}
+.tile .s{color:var(--muted);font-size:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px;margin-top:20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 16px 12px;min-width:0}
+.card p.sub{margin:0 0 8px;color:var(--text-2);font-size:14px}
+.card .note{color:var(--muted);font-size:13px;margin:6px 0 0}
+.chart{position:relative;width:100%}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--text-2);margin:2px 0 6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.legend i.line{height:3px;width:14px;border-radius:2px;vertical-align:3px}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--border);box-shadow:0 4px 16px rgba(0,0,0,.12);border-radius:8px;padding:8px 10px;font-size:12.5px;line-height:1.45;white-space:nowrap;opacity:0;transition:opacity .08s;z-index:3}
+.tip b{font-weight:600}
+.tip .k{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px}
+.insight{background:var(--accent-soft);border-radius:12px;padding:14px 16px;margin:20px 0 0;max-width:820px}
+.insight b{font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--text-2);font-weight:500;font-size:13px}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-top:20px}
+ol.steps,ul.list{padding-left:20px;max-width:800px;color:var(--text-2)}
+ol.steps li,ul.list li{margin:6px 0}
+ol.steps b,ul.list b{color:var(--text)}
+details{margin-top:6px}
+details summary{cursor:pointer;color:var(--muted);font-size:13px}
+details table{font-size:12.5px}
+footer{padding:32px 0 48px;color:var(--muted);font-size:13px;border-top:1px solid var(--border)}
+svg text{font-family:Inter,system-ui,sans-serif}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <b>AML Alerts · EDA</b>
+  <nav>
+    <a href="#approach">Approach</a><a href="#data">Dataset</a><a href="#target">Target</a>
+    <a href="#behavior">Transactions</a><a href="#timing">Timing</a><a href="#diff">Escalated vs dismissed</a>
+    <a href="#model">Features &amp; model</a><a href="#conclusion">Conclusion</a>
+  </nav>
+  <button id="theme" type="button" aria-label="Toggle color theme">Theme</button>
+</div></header>
+
+<div class="wrap hero">
+  <div class="eyebrow">FinTech / AI in Finance · Team A2B70C81</div>
+  <h1>Which AML alerts get escalated?</h1>
+  <p class="lead">We had 14,000 labelled alerts and about 7 million historical transactions, and
+  our task was to rank 6,000 unseen alerts by their probability of escalation. This page explains
+  how we explored the data, what we found, and how those findings shaped the model.</p>
+  <div class="tiles" id="kpis"></div>
+</div>
+
+<section id="approach"><div class="wrap">
+  <h2>Our approach</h2>
+  <ol class="steps">
+    <li><b>Understand the data layout.</b> Each alert (<code>signal_id</code>) links to many transactions.
+      We checked the time window covered by each alert's history, how the train and test sets are split, and what
+      the standardised size index represents.</li>
+    <li><b>Look for separating behaviour.</b> We compared escalated and dismissed alerts on transaction volume, mix,
+      size, timing and direction. We measured each candidate signal by its univariate ROC-AUC, so that weak
+      effects didn't get buried.</li>
+    <li><b>Aggregate the history into features.</b> We built 277 features for each alert, including
+      distribution statistics for each direction × type combination, recency windows, flow balances,
+      drift, and a pooled "size level".</li>
+    <li><b>Validate honestly.</b> Train and test cover the same dates, so we used 5-fold stratified CV repeated over
+      3 seeds. We kept only changes that beat the fold-to-fold noise (about ±0.003 AUC) and ran ablations on each
+      feature group.</li>
+    <li><b>Ensemble and calibrate.</b> We blend the ranks of a shallow LightGBM, a small CatBoost and a logistic
+      regression, then apply Platt scaling to the blend. Scaling doesn't change the ranking, so AUC is unaffected,
+      but the outputs become real escalation probabilities.</li>
+  </ol>
+</div></section>
+
+<section id="data"><div class="wrap">
+  <h2>Dataset overview</h2>
+  <p>The data has two levels: one row per alert, plus a long table of the transactions that preceded it.
+  Alerts span two full years, and the train and test alerts are spread evenly across the same months.
+  This is a <b>random split, not a time split</b>, which is why we used stratified K-fold instead of
+  time-based validation.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>File</th><th>Rows</th><th>Columns</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>train_signals.csv</code></td><td id="r1"></td><td><code>signal_id</code>, <code>signal_sanasi</code>, <code>eskalatsiya</code></td><td>Alert date plus binary target</td></tr>
+      <tr><td><code>test_signals.csv</code></td><td id="r2"></td><td><code>signal_id</code>, <code>signal_sanasi</code></td><td>Same date range as train</td></tr>
+      <tr><td><code>train_transactions.parquet</code></td><td id="r3"></td><td><code>tranzaksiya_vaqti</code>, <code>kirim_chiqim</code>, <code>tranzaksiya_turi</code>, <code>miqdor_indeksi</code></td><td>1–2,279 transactions per alert, median 461</td></tr>
+      <tr><td><code>test_transactions.parquet</code></td><td id="r4"></td><td>same</td><td>No transaction appears in both train and test</td></tr>
+    </tbody>
+  </table></div>
+  <div class="grid2">
+    <div class="card"><h3>Alerts per month</h3><p class="sub">Train and test follow the same calendar, confirming a random split</p>
+      <div class="legend"><span><i class="line" style="background:var(--s1)"></i>Train</span><span><i class="line" style="background:var(--s2)"></i>Test</span></div>
+      <div class="chart" id="c-monthly"></div></div>
+    <div class="card"><h3>Transactions per alert</h3><p class="sub">Share of alerts in each bucket of 100 transactions</p>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Dismissed</span><span><i style="background:var(--s2)"></i>Escalated</span></div>
+      <div class="chart" id="c-txhist"></div></div>
+  </div>
+  <div class="insight"><b>History window.</b> Each alert comes with about 180 days of transactions ending at
+  the alert date (median span 179.5 days). Only 21 of 14,000 training alerts have any transaction dated
+  after the alert, too few to use as a feature.</div>
+</div></section>
+
+<section id="target"><div class="wrap">
+  <h2>Target distribution</h2>
+  <p>About 1 in 6 alerts is escalated (<span id="rate-txt"></span>). The classes are imbalanced but not extremely
+  so. ROC-AUC ignores the base rate, so we didn't resample, and we calibrated the final probabilities to the
+  observed rate. The escalation rate stays flat over the calendar. It rises gently with the number of
+  transactions: busier accounts get escalated slightly more often.</p>
+  <div class="grid2">
+    <div class="card"><h3>Escalation rate by month</h3><p class="sub">No trend or seasonality; the reference line marks the overall rate</p>
+      <div class="chart" id="c-rate-month"></div></div>
+    <div class="card"><h3>Escalation rate by transaction-count decile</h3><p class="sub">Deciles of transactions per alert, from fewest to most; the line marks the overall 17.2%</p>
+      <div class="chart" id="c-count-dec"></div></div>
+  </div>
+</div></section>
+
+<section id="behavior"><div class="wrap">
+  <h2>Transaction behaviour</h2>
+  <p>Cards and bank transfers make up about 93% of all transactions. Incoming transactions (<code>kirim</code>) outnumber
+  outgoing ones (<code>chiqim</code>) roughly 3 to 1. The size index is a continuous, log-like score: each
+  type has its own level, and international transfers sit about 2 standard deviations above card payments.
+  Every type has a hard upper cap (for example, cards stop at 4.18), and there are no repeated or round amounts.</p>
+  <div class="grid2">
+    <div class="card"><h3>Transaction mix by type and direction</h3><p class="sub">Training transactions, millions</p>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Incoming (kirim)</span><span><i style="background:var(--s2)"></i>Outgoing (chiqim)</span></div>
+      <div class="chart" id="c-mix"></div></div>
+    <div class="card"><h3>Size-index distribution by type</h3><p class="sub">Density of <code>miqdor_indeksi</code></p>
+      <div class="legend"><span><i class="line" style="background:var(--s1)"></i>Card</span><span><i class="line" style="background:var(--s2)"></i>Bank transfer</span><span><i class="line" style="background:var(--s3)"></i>Cash</span><span><i class="line" style="background:var(--s4)"></i>International</span></div>
+      <div class="chart" id="c-dens"></div></div>
+  </div>
+  <div class="insight"><b>The mix barely separates the classes.</b> Escalated and dismissed alerts have almost the
+  same share of each transaction type (cards 52.2% vs 52.1%, cash 6.5% vs 6.2%, escalated vs dismissed). Whatever drives escalation,
+  it isn't simply "more cash" or "more international".</div>
+</div></section>
+
+<section id="timing"><div class="wrap">
+  <h2>Activity over time and right before the alert</h2>
+  <p>We normalised each alert's history to a total of 1, then averaged the daily activity profile separately
+  for escalated and dismissed alerts. The two profiles are almost identical: regular activity peaks 4–5 months
+  before the alert and fades steadily over the final ~3 months. The one sharp structure is at the very end: <b><span id="burst-txt"></span> of all transactions happen in the final
+  10 minutes before midnight of the alert date</b>, a median of <span id="burst-med"></span> transactions per alert, spread evenly over the last ~3 minutes.</p>
+  <div class="grid2">
+    <div class="card"><h3>Normalised daily activity before the alert</h3><p class="sub">7-day rolling mean of daily transaction share, 180 days → alert (day 0 burst excluded)</p>
+      <div class="legend"><span><i class="line" style="background:var(--s1)"></i>Dismissed</span><span><i class="line" style="background:var(--s2)"></i>Escalated</span></div>
+      <div class="chart" id="c-activity"></div></div>
+    <div class="card"><h3>The pre-alert burst</h3><p class="sub">Training transactions per 10-second bin in the last 6 minutes before the alert timestamp (seconds before alert)</p>
+      <div class="chart" id="c-burst"></div></div>
+  </div>
+  <div class="insight"><b>What we did with the burst.</b> We separated the "burst" (last 10 minutes) from the
+  "regular history" and built features for each. The burst itself is only weakly informative (AUC ≈ 0.51–0.52),
+  so the model relies mostly on the long-run history. Hour-of-day and weekday patterns are completely flat,
+  shown under <a href="#negatives">"What didn't work"</a>.</div>
+</div></section>
+
+<section id="diff"><div class="wrap">
+  <h2>Escalated vs dismissed: where the signal is</h2>
+  <p>The strongest single pattern is in <b>bank transfer size</b>. Escalated alerts have relatively more small
+  bank transfers and fewer large ones. This is a smooth, monotone shift, not a threshold effect, so we saw no
+  structuring spikes just below a limit. Grouping alerts by their average bank-transfer size, the escalation
+  rate falls from about 22% in the lowest decile to 12% in the highest.</p>
+  <div class="grid2">
+    <div class="card"><h3>Bank-transfer size: escalated vs dismissed</h3><p class="sub">Ratio of the escalated to the dismissed share of transfers in each size bin (1 = no difference)</p>
+      <div class="chart" id="c-btratio"></div></div>
+    <div class="card"><h3>Escalation rate by average bank-transfer size</h3><p class="sub">Deciles of each alert's mean bank-transfer index, from smallest to largest; the line marks the overall 17.2%</p>
+      <div class="chart" id="c-btdec"></div></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>Strongest single features</h3><p class="sub">Univariate ROC-AUC, direction-agnostic (0.5 = no signal)</p>
+      <div class="chart" id="c-uni"></div></div>
+    <div class="card"><h3>Distribution of mean bank-transfer size per alert</h3><p class="sub">Share of alerts in each bin</p>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Dismissed</span><span><i style="background:var(--s2)"></i>Escalated</span></div>
+      <div class="chart" id="c-bthist"></div></div>
+  </div>
+  <div class="insight"><b>Weak signals that add up.</b> No single feature exceeds 0.575 AUC. The signal is
+  <em>diffuse</em>: many small, mostly monotone effects spread across the direction × type size
+  distributions. That's why a linear model on rank-transformed features gets within 0.008 AUC of gradient
+  boosting, and why strong regularisation (depth 3, 7 leaves) beat deeper trees.</div>
+</div></section>
+
+<section id="model"><div class="wrap">
+  <h2>Features and modelling ideas motivated by the EDA</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>EDA observation</th><th>Features / decision</th></tr></thead>
+    <tbody>
+      <tr><td>Size levels differ by direction × type, and bank-transfer size separates the classes</td><td>Mean, std, min, max and q10/25/50/75/90 of the size index for each of the 8 direction × type cells; shares in size bins; type quantiles</td></tr>
+      <tr><td>Size levels are strongly correlated across types (ρ ≈ 0.95)</td><td>A pooled "size level": the residual after removing the global direction × type mean, averaged per alert (reference stats fitted on train only)</td></tr>
+      <tr><td>Busier accounts escalate slightly more often</td><td>Counts, active days, transactions per active day, daily max and std</td></tr>
+      <tr><td>Incoming transactions dominate; flow balance matters in AML</td><td>Incoming share, net flow and in/out ratio on exponentiated sizes, and a pass-through score (min/max of in vs out volume)</td></tr>
+      <tr><td>Activity ends in a burst just before the alert</td><td>Burst vs regular-history split, recency windows (7/30/90 days), ratios of recent to baseline rates, 60-day size drift, monthly trend slope</td></tr>
+      <tr><td>Random split in time; weak, diffuse signal</td><td>Stratified 5-fold CV × 3 seeds, shallow and heavily regularised models, rank-blending of different model families</td></tr>
+    </tbody>
+  </table></div>
+  <div class="grid2">
+    <div class="card"><h3>Out-of-fold ROC-AUC by model</h3><p class="sub">5-fold stratified CV, averaged over 3 seeds</p>
+      <div class="chart" id="c-models"></div>
+      <p class="note">Blend = rank average with weights LightGBM 0.52 · LR 0.32 · CatBoost 0.17, then Platt-calibrated.</p></div>
+    <div class="card"><h3>Where the model finds signal</h3><p class="sub">Share of LightGBM gain by feature group</p>
+      <div class="chart" id="c-groups"></div></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>Top 15 features by gain</h3><p class="sub">Final LightGBM configuration trained on all data</p>
+      <div class="chart" id="c-imp"></div></div>
+    <div class="card"><h3>Feature group ablation</h3><p class="sub">Change in OOF AUC when a group is removed (3-seed mean)</p>
+      <div class="chart" id="c-abl"></div>
+      <p class="note">Removing the direction × type stats costs the most. Removing the 100 recency-window features cost nothing, so we cut them down to three windows.</p></div>
+  </div>
+  <h3 style="margin-top:28px">Experiments we tried and dropped</h3>
+  <ul class="list">
+    <li><b>Transaction-level model</b> (each transaction inherits its alert's label, predictions pooled per alert): 0.54 AUC. Too noisy, dropped.</li>
+    <li><b>Deeper / longer CatBoost</b> (1,500 iterations, depth 6): 0.623, clearly overfitting. The small version (400 iterations, depth 4) reaches 0.646.</li>
+    <li><b>Burst-only features</b>: AUC 0.51–0.52 on their own; kept, but they add little.</li>
+  </ul>
+</div></section>
+
+<section id="negatives"><div class="wrap">
+  <h2>What didn't carry signal</h2>
+  <p>Negative results matter too: they stopped us from overfitting to noise.</p>
+  <div class="grid2">
+    <div class="card"><h3>Escalation rate by transaction hour</h3><p class="sub">Transaction-weighted. Completely flat, so time-of-day features are noise</p>
+      <div class="chart" id="c-hour"></div></div>
+    <div class="card"><h3>Other checks</h3>
+      <ul class="list" style="margin:0">
+        <li><b>Alert ID order</b>: escalation rate is flat across ID deciles (15.9–18.5%). No leakage; not used.</li>
+        <li><b>Alert date / month / weekday</b>: flat. Kept as weak features, but ablation shows no gain.</li>
+        <li><b>Round or repeated amounts</b>: only 145 of 7M values repeat, and those are just the per-type caps. No structuring signature.</li>
+        <li><b>Share of cash / international</b>: nearly identical between classes.</li>
+      </ul></div>
+  </div>
+</div></section>
+
+<section id="conclusion"><div class="wrap">
+  <h2>Conclusion</h2>
+  <ul class="list">
+    <li><b>The data is a random split</b> with a 180-day history per alert and a 17.2% escalation rate. Stratified CV matches the test setting.</li>
+    <li><b>Escalation is driven by the size profile, not the mix.</b> Escalated alerts are associated with smaller (especially outgoing) bank transfers, a different card-size range, and slightly higher activity.</li>
+    <li><b>The signal is weak and diffuse.</b> The best single feature scores 0.575 AUC; combining about 270 history aggregates lifts this to about 0.65 OOF.</li>
+    <li><b>Simple and regularised models win.</b> Shallow LightGBM, small CatBoost and a logistic regression, rank-blended and calibrated: <b id="final-auc"></b> OOF ROC-AUC.</li>
+    <li><b>Timing is mostly an artefact.</b> Hour, weekday and the pre-alert burst carry almost no information.</li>
+  </ul>
+  <p style="color:var(--muted);font-size:14px">The data is synthetic and contains no real customer records. The code is fully reproducible from the team notebook
+  (<code>notebook.ipynb</code>): feature engineering → CV → ensemble → submission.</p>
+</div></section>
+
+<footer><div class="wrap">Team A2B70C81 · AML Alert Prioritization · Austerlitz elimination task · 2026</div></footer>
+
+<script>
+(function(){
+const root=document.documentElement;
+try{const s=localStorage.getItem('theme');if(s)root.dataset.theme=s;}catch(e){}
+document.getElementById('theme').onclick=()=>{
+  const cur=root.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  root.dataset.theme=cur==='dark'?'light':'dark';
+  try{localStorage.setItem('theme',root.dataset.theme);}catch(e){}
+  renderAll();
+};
+
+const css=v=>getComputedStyle(root).getPropertyValue(v).trim();
+const NS='http://www.w3.org/2000/svg';
+const el=(tag,attrs,parent)=>{const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);parent&&parent.appendChild(e);return e;};
+const pct=(v,d=1)=>(v*100).toFixed(d)+'%';
+const fmtN=v=>v.toLocaleString('en-US');
+function niceTicks(lo,hi,n=4){const span=hi-lo||1;const step0=span/n;const mag=Math.pow(10,Math.floor(Math.log10(step0)));
+  const step=[1,2,2.5,5,10].map(m=>m*mag).find(s=>s>=step0);const t=[];for(let v=Math.ceil(lo/step)*step;v<=hi+1e-9;v+=step)t.push(+v.toFixed(10));return t;}
+
+function frame(id,h){
+  const host=document.getElementById(id);host.innerHTML='';
+  const W=Math.max(280,host.clientWidth);const svg=el('svg',{viewBox:`0 0 ${W} ${h}`,role:'img'},host);
+  const tip=document.createElement('div');tip.className='tip';host.appendChild(tip);
+  const show=(html,x,y)=>{tip.innerHTML=html;tip.style.opacity=1;const tw=tip.offsetWidth;let lx=x+14;if(lx+tw>W)lx=x-tw-14;tip.style.left=Math.max(0,lx)+'px';tip.style.top=Math.max(0,y-10)+'px';};
+  const hide=()=>tip.style.opacity=0;
+  return {host,svg,W,h,show,hide};
+}
+function yAxis(f,y,ticks,fmt,m){
+  ticks.forEach(t=>{const yy=y(t);el('line',{x1:m.l,x2:f.W-m.r,y1:yy,y2:yy,stroke:css('--grid'),'stroke-width':1},f.svg);
+    const tx=el('text',{x:m.l-8,y:yy+4,'text-anchor':'end','font-size':11,fill:css('--muted')},f.svg);tx.textContent=fmt(t);});
+}
+function sw(c){return `<span class="k" style="background:${c}"></span>`;}
+
+// line chart with crosshair
+function line(id,{data,x,series,yfmt=v=>v,xfmt=v=>v,h=240,ymin,ymax,ref,xticks,tipTitle,rev=false}){
+  const f=frame(id,h),m={l:44,r:14,t:10,b:28};
+  const xs=data.map(d=>d[x]);const x0=Math.min(...xs),x1=Math.max(...xs);
+  const all=data.flatMap(d=>series.map(s=>d[s.k])).filter(v=>v!=null);
+  let lo=ymin!=null?ymin:Math.min(...all),hi=ymax!=null?ymax:Math.max(...all);
+  if(ref!=null){lo=Math.min(lo,ref);hi=Math.max(hi,ref);}
+  const pad=(hi-lo)*0.08;if(ymin==null)lo-=pad;hi+=pad;
+  const X=v=>m.l+(rev?(x1-v):(v-x0))/(x1-x0||1)*(f.W-m.l-m.r),Y=v=>m.t+(1-(v-lo)/(hi-lo))*(h-m.t-m.b);
+  yAxis(f,Y,niceTicks(lo,hi),yfmt,m);
+  (xticks||niceTicks(x0,x1,5)).forEach(t=>{const tx=el('text',{x:X(t),y:h-8,'text-anchor':'middle','font-size':11,fill:css('--muted')},f.svg);tx.textContent=xfmt(t);});
+  if(ref!=null){el('line',{x1:m.l,x2:f.W-m.r,y1:Y(ref),y2:Y(ref),stroke:css('--text-2'),'stroke-width':1,'stroke-dasharray':'0'},f.svg);}
+  series.forEach(s=>{const pts=data.filter(d=>d[s.k]!=null).map(d=>`${X(d[x])},${Y(d[s.k])}`).join(' ');
+    el('polyline',{points:pts,fill:'none',stroke:css(s.c),'stroke-width':2,'stroke-linejoin':'round','stroke-linecap':'round'},f.svg);});
+  const cross=el('line',{y1:m.t,y2:h-m.b,stroke:css('--muted'),'stroke-width':1,opacity:0},f.svg);
+  const dots=series.map(s=>el('circle',{r:4,fill:css(s.c),stroke:css('--surface'),'stroke-width':2,opacity:0},f.svg));
+  const hit=el('rect',{x:m.l,y:0,width:f.W-m.l-m.r,height:h,fill:'transparent'},f.svg);
+  const move=ev=>{const r=f.svg.getBoundingClientRect();const px=(ev.clientX-r.left)*f.W/r.width;
+    let best=0,bd=1e9;data.forEach((d,i)=>{const dd=Math.abs(X(d[x])-px);if(dd<bd){bd=dd;best=i;}});
+    const d=data[best];cross.setAttribute('x1',X(d[x]));cross.setAttribute('x2',X(d[x]));cross.setAttribute('opacity',1);
+    series.forEach((s,i)=>{if(d[s.k]==null){dots[i].setAttribute('opacity',0);return;}dots[i].setAttribute('cx',X(d[x]));dots[i].setAttribute('cy',Y(d[s.k]));dots[i].setAttribute('opacity',1);});
+    f.show(`<b>${tipTitle?tipTitle(d):xfmt(d[x])}</b><br>`+series.map(s=>`${sw(css(s.c))}${s.label}: <b>${d[s.k]==null?'–':yfmt(d[s.k])}</b>`).join('<br>'),X(d[x])*r.width/f.W,(ev.clientY-r.top));};
+  hit.addEventListener('pointermove',move);hit.addEventListener('pointerleave',()=>{cross.setAttribute('opacity',0);dots.forEach(d=>d.setAttribute('opacity',0));f.hide();});
+}
+
+// vertical columns (1-2 series grouped)
+function cols(id,{data,cat,series,yfmt=v=>v,h=240,ref,labelEvery=1,tipTitle,ymin=0}){
+  const f=frame(id,h),m={l:44,r:10,t:10,b:30};
+  const all=data.flatMap(d=>series.map(s=>d[s.k]));let hi=Math.max(...all,ref||0)*1.1,lo=ymin;
+  const Y=v=>m.t+(1-(v-lo)/(hi-lo))*(h-m.t-m.b);
+  yAxis(f,Y,niceTicks(lo,hi),yfmt,m);
+  const band=(f.W-m.l-m.r)/data.length;const gap=2;const bw=Math.min(24,(band*0.8-gap*(series.length-1))/series.length);
+  data.forEach((d,i)=>{const gx=m.l+i*band+(band-(bw*series.length+gap*(series.length-1)))/2;
+    series.forEach((s,j)=>{const v=d[s.k];if(v==null)return;const x=gx+j*(bw+gap),y0=Y(lo),y1=Y(v);const r=Math.min(4,bw/2,Math.abs(y0-y1));
+      el('path',{d:`M${x},${y0}V${y1+r}Q${x},${y1} ${x+r},${y1}H${x+bw-r}Q${x+bw},${y1} ${x+bw},${y1+r}V${y0}Z`,fill:css(s.c)},f.svg);});
+    if(i%labelEvery===0){const tx=el('text',{x:m.l+i*band+band/2,y:h-10,'text-anchor':'middle','font-size':11,fill:css('--muted')},f.svg);tx.textContent=d[cat];}
+    const hit=el('rect',{x:m.l+i*band,y:m.t,width:band,height:h-m.t-m.b,fill:'transparent'},f.svg);
+    hit.addEventListener('pointermove',ev=>{const r=f.svg.getBoundingClientRect();hit.setAttribute('fill',css('--grid'));hit.setAttribute('fill-opacity',.35);
+      f.show(`<b>${tipTitle?tipTitle(d):d[cat]}</b><br>`+series.map(s=>`${series.length>1?sw(css(s.c)):''}${s.label}: <b>${yfmt(d[s.k])}</b>`).join('<br>'),ev.clientX-r.left,ev.clientY-r.top);});
+    hit.addEventListener('pointerleave',()=>{hit.setAttribute('fill','transparent');f.hide();});
+  });
+  if(ref!=null){el('line',{x1:m.l,x2:f.W-m.r,y1:Y(ref),y2:Y(ref),stroke:css('--text-2'),'stroke-width':1},f.svg);
+}
+  f.svg.querySelectorAll('rect').forEach(r=>f.svg.appendChild(r));
+}
+
+// horizontal bars, single series, value label at tip
+function hbars(id,{data,cat,val,fmt=v=>v,color='--s1',x0=0,labelW=190,tipFmt,signed=false}){
+  const row=26,m={l:labelW,r:56,t:4,b:6};const h=m.t+m.b+row*data.length;const f=frame(id,h);
+  const vals=data.map(d=>d[val]);let lo=signed?Math.min(0,...vals):x0,hi=Math.max(0,...vals);if(signed&&hi===0)hi=Math.abs(lo)*0.15;
+  const X=v=>m.l+(v-lo)/(hi-lo)*(f.W-m.l-m.r);
+  if(signed)el('line',{x1:X(0),x2:X(0),y1:m.t,y2:h-m.b,stroke:css('--grid'),'stroke-width':1},f.svg);
+  data.forEach((d,i)=>{const y=m.t+i*row,bh=16,by=y+(row-bh)/2,v=d[val];const a=X(signed?0:x0),b=X(v);
+    const xL=Math.min(a,b),w=Math.max(1,Math.abs(b-a)),r=Math.min(4,w/2);
+    const pth=b>=a?`M${xL},${by}H${xL+w-r}Q${xL+w},${by} ${xL+w},${by+r}V${by+bh-r}Q${xL+w},${by+bh} ${xL+w-r},${by+bh}H${xL}Z`
+                  :`M${xL+w},${by}H${xL+r}Q${xL},${by} ${xL},${by+r}V${by+bh-r}Q${xL},${by+bh} ${xL+r},${by+bh}H${xL+w}Z`;
+    el('path',{d:pth,fill:css(d.c||color)},f.svg);
+    const lt=el('text',{x:m.l-8,y:by+12,'text-anchor':'end','font-size':11.5,fill:css('--text-2')},f.svg);lt.textContent=d[cat].length>30?d[cat].slice(0,29)+'…':d[cat];
+    const vt=el('text',{x:(b>=a?xL+w:xL)+(b>=a?6:-6),y:by+12,'text-anchor':b>=a?'start':'end','font-size':11.5,fill:css('--text')},f.svg);vt.textContent=fmt(v);
+    const hit=el('rect',{x:0,y,width:f.W,height:row,fill:'transparent'},f.svg);
+    hit.addEventListener('pointermove',ev=>{const r=f.svg.getBoundingClientRect();f.show(`<b>${d[cat]}</b><br>${tipFmt?tipFmt(d):fmt(v)}`,ev.clientX-r.left,ev.clientY-r.top);});
+    hit.addEventListener('pointerleave',f.hide);
+  });
+}
+
+let D;
+function renderAll(){
+  if(!D)return;
+  const o=D.overview;
+  const monthLab=m=>{const [y,mm]=m.split('-');return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mm-1]+' '+y.slice(2);};
+  const mdata=D.monthly.map((d,i)=>({...d,i}));
+  line('c-monthly',{data:mdata,x:'i',series:[{k:'train',label:'Train',c:'--s1'},{k:'test',label:'Test',c:'--s2'}],ymin:0,
+    xticks:[0,6,12,18,23],xfmt:i=>monthLab(D.monthly[i].m),yfmt:v=>fmtN(Math.round(v)),tipTitle:d=>monthLab(d.m)});
+  cols('c-txhist',{data:D.txcount_hist.slice(0,16).map(d=>({...d,lab:d.lo})),cat:'lab',series:[{k:'d',label:'Dismissed',c:'--s1'},{k:'e',label:'Escalated',c:'--s2'}],
+    yfmt:v=>pct(v,0),labelEvery:3,tipTitle:d=>`${d.lo+1}–${d.hi} transactions`});
+  line('c-rate-month',{data:mdata,x:'i',series:[{k:'rate',label:'Escalation rate',c:'--s1'}],ref:o.rate,ymin:0.1,ymax:0.25,
+    xticks:[0,6,12,18,23],xfmt:i=>monthLab(D.monthly[i].m),yfmt:v=>pct(v,0),tipTitle:d=>`${monthLab(d.m)} · ${fmtN(d.train)} alerts`});
+  cols('c-count-dec',{data:D.txcount_decile.map((d,i)=>({...d,k:'D'+(i+1)})),cat:'k',series:[{k:'rate',label:'Escalation rate',c:'--s1'}],yfmt:v=>pct(v,1),ref:o.rate,tipTitle:d=>`Decile ${d.k.slice(1)}: ${d.lab} transactions`});
+  const tyName={karta:'Card',bank_otkazmasi:'Bank transfer',naqd:'Cash',xalqaro:'International'};
+  cols('c-mix',{data:D.mix.map(d=>({...d,lab:tyName[d.type],kirim:d.kirim/1e6,chiqim:d.chiqim/1e6})).sort((a,b)=>b.kirim-a.kirim),cat:'lab',
+    series:[{k:'kirim',label:'Incoming',c:'--s1'},{k:'chiqim',label:'Outgoing',c:'--s2'}],yfmt:v=>v>=0.1?v.toFixed(2)+'M':fmtN(Math.round(v*1e6))});
+  const ad=D.amount_density.x.map((x,i)=>({x,karta:D.amount_density.karta[i],bank_otkazmasi:D.amount_density.bank_otkazmasi[i],naqd:D.amount_density.naqd[i],xalqaro:D.amount_density.xalqaro[i]}));
+  line('c-dens',{data:ad,x:'x',series:[{k:'karta',label:'Card',c:'--s1'},{k:'bank_otkazmasi',label:'Bank transfer',c:'--s2'},{k:'naqd',label:'Cash',c:'--s3'},{k:'xalqaro',label:'International',c:'--s4'}],
+    ymin:0,yfmt:v=>v.toFixed(2),xfmt:v=>v.toFixed(1),tipTitle:d=>`Index ${(d.x-0.125).toFixed(2)} to ${(d.x+0.125).toFixed(2)}`});
+  // activity: 7-day rolling mean, excluding day 0 (burst)
+  const act=D.activity.filter(d=>d.d>0).sort((a,b)=>a.d-b.d);
+  const roll=act.map((d,i)=>{const w=act.slice(Math.max(0,i-3),i+4);return {d:d.d,dism:w.reduce((s,v)=>s+v.dism,0)/w.length,esc:w.reduce((s,v)=>s+v.esc,0)/w.length};});
+  line('c-activity',{data:roll,x:'d',series:[{k:'dism',label:'Dismissed',c:'--s1'},{k:'esc',label:'Escalated',c:'--s2'}],
+    yfmt:v=>pct(v,2),xfmt:v=>v+'d',rev:true,xticks:[180,150,120,90,60,30,1],tipTitle:d=>`${d.d} days before alert`});
+  cols('c-burst',{data:D.burst.map(d=>({...d,lab:d.m})),cat:'lab',series:[{k:'n',label:'Transactions',c:'--s1'}],yfmt:v=>v>=1000?Math.round(v/1000)+'K':fmtN(v),
+    labelEvery:6,tipTitle:d=>`${d.m}–${d.m+10} s before the alert`});
+  line('c-btratio',{data:D.bt_ratio,x:'x',series:[{k:'r',label:'Escalated ÷ dismissed',c:'--s2'}],ref:1,yfmt:v=>v.toFixed(2)+'×',xfmt:v=>v.toFixed(1),
+    tipTitle:d=>`Bank transfers, index ${(d.x-0.125).toFixed(2)} to ${(d.x+0.125).toFixed(2)}`});
+  cols('c-btdec',{data:D.bt_mean_decile.map(d=>({...d,k:'D'+d.lab})),cat:'k',series:[{k:'rate',label:'Escalation rate',c:'--s1'}],yfmt:v=>pct(v,1),ref:o.rate,
+    tipTitle:d=>`Decile ${d.lab} of mean bank-transfer size`});
+  hbars('c-uni',{data:D.univariate_auc.slice(0,10),cat:'f',val:'auc',x0:0.5,fmt:v=>v.toFixed(3),labelW:200});
+  line('c-bthist',{data:D.bt_mean_hist.filter(d=>d.d>0.002||d.e>0.002),x:'x',series:[{k:'d',label:'Dismissed',c:'--s1'},{k:'e',label:'Escalated',c:'--s2'}],ymin:0,yfmt:v=>pct(v,0),xfmt:v=>v.toFixed(1),
+    tipTitle:d=>`Mean bank-transfer index ≈ ${d.x}`});
+  const mName={lgb:'LightGBM (shallow)',cat:'CatBoost (small)',lr:'Logistic regression',blend:'Rank blend (final)'};
+  hbars('c-models',{data:D.models.map(d=>({...d,n:mName[d.m],c:d.m==='blend'?'--s2':'--s1'})),cat:'n',val:'auc',x0:0.6,fmt:v=>v.toFixed(4),labelW:150});
+  hbars('c-groups',{data:D.importance_groups,cat:'g',val:'v',fmt:v=>pct(v,1),labelW:170});
+  hbars('c-imp',{data:D.importance,cat:'f',val:'g',fmt:v=>pct(v,1),labelW:200});
+  const abl=[{g:'Dir × type stats',v:-0.0046},{g:'Flow & sums',v:-0.0022},{g:'Amount bins',v:-0.0011},{g:'Type quantiles',v:-0.0010},{g:'Gaps & bursts',v:-0.0009},
+    {g:'Monthly means',v:-0.0005},{g:'History split',v:-0.0005},{g:'Alert calendar',v:-0.0005},{g:'Recency windows (100)',v:-0.0002},{g:'Daily profile',v:0},{g:'Hour / weekend',v:0.0002}];
+  hbars('c-abl',{data:abl,cat:'g',val:'v',fmt:v=>(v>0?'+':'')+v.toFixed(4),labelW:160,signed:true});
+  line('c-hour',{data:D.hour,x:'h',series:[{k:'rate',label:'Escalation rate',c:'--s1'}],ymin:0,ymax:0.25,yfmt:v=>pct(v,1),xfmt:v=>v+'h',xticks:[0,6,12,18,23],tipTitle:d=>`${d.h}:00–${d.h}:59`});
+}
+
+fetch('data.json').then(r=>r.json()).then(d=>{D=d;const o=d.overview;
+  const blend=d.models.find(m=>m.m==='blend').auc;
+  document.getElementById('kpis').innerHTML=[
+    ['Training alerts',fmtN(o.n_train),`${fmtN(o.n_pos)} escalated`],['Test alerts',fmtN(o.n_test),'to be ranked'],
+    ['Transactions',(o.n_tx_train/1e6).toFixed(2)+'M',`+ ${(o.n_tx_test/1e6).toFixed(2)}M in test`],['Escalation rate',pct(o.rate),'training base rate'],
+    ['OOF ROC-AUC',blend.toFixed(3),'5-fold × 3 seeds']].map(([l,v,s])=>`<div class="tile"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+  document.getElementById('r1').textContent=fmtN(o.n_train);document.getElementById('r2').textContent=fmtN(o.n_test);
+  document.getElementById('r3').textContent=fmtN(o.n_tx_train);document.getElementById('r4').textContent=fmtN(o.n_tx_test);
+  document.getElementById('rate-txt').textContent=pct(o.rate)+`, ${fmtN(o.n_pos)} of ${fmtN(o.n_train)}`;
+  document.getElementById('burst-txt').textContent=pct(d.burst_share);document.getElementById('burst-med').textContent=d.burst_per_alert_med;
+  document.getElementById('final-auc').textContent=blend.toFixed(3);
+  renderAll();
+});
+let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(renderAll,150);});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',renderAll);
+})();
+</script>
+</body>
+</html>
